@@ -1,0 +1,10 @@
+<component name="ArtifactManager">
+  <artifact name="pi_compute:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/pi_compute_jar</output-path>
+    <root id="root">
+      <element id="archive" name="eksploracja-danych.jar">
+        <element id="module-output" name="eksploracja-danych" />
+      </element>
+    </root>
+  </artifact>
+</component>

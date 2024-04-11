@@ -1,0 +1,10 @@
+<component name="ArtifactManager">
+  <artifact name="distributed_dataset:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/distributed_dataset_jar</output-path>
+    <root id="root">
+      <element id="archive" name="distributed_dataset.jar">
+        <element id="module-output" name="eksploracja-danych" />
+      </element>
+    </root>
+  </artifact>
+</component>
