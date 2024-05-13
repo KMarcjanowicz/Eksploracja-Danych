@@ -8,7 +8,7 @@ RUN set -ex; \
     apt-get update; \
     apt-get install -y sudo python3 python3-pip; \
     pip3 cache purge; \
-    pip3 install pyspark numpy scikit-learn scipy pandas matplotlib plotly jupyterlab; \
+    pip3 install pyspark numpy scikit-learn pandas matplotlib plotly jupyterlab; \
     apt-get install -y pandoc; \
     apt-get install -y texlive-xetex texlive-fonts-recommended texlive-plain-generic; \
     apt-get install -y texlive-latex-extra texlive-fonts-extra texlive-lang-all; \
