@@ -1,21 +1,30 @@
 package isi.ed;
 
 
+import com.github.sh0nk.matplotlib4j.Plot;
+import com.github.sh0nk.matplotlib4j.PythonConfig;
+import com.github.sh0nk.matplotlib4j.PythonExecutionException;
 import org.apache.spark.api.java.function.ForeachFunction;
+import org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.feature.VectorAssembler;
-import org.apache.spark.ml.linalg.DenseVector;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
+import org.apache.spark.ml.regression.LinearRegressionModel;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.api.java.UDF1;
+import scala.Tuple2;
 
+import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
-import static org.apache.spark.sql.functions.callUDF;
-import static org.apache.spark.sql.functions.col;
+import static isi.ed.DataHandler.LoadGrid;
+import static org.apache.spark.sql.functions.*;
 
 public class Logistics {
 
@@ -89,6 +98,33 @@ public class Logistics {
         });
     }
 
+    //write me a function trainandtest which does:
+    // takes a datase<ROW> and transforms it using vector assempleer
+    // splits it into two sets: train adn test
+    // trains a logistic regression model on the train set
+    // tests the model on the test set
+    // returns the model
+    static Tuple2<LogisticRegressionModel, Dataset<Row>> TrainAndTest(Dataset<Row> df){
+        LogisticRegression lr = new LogisticRegression()
+                .setMaxIter(100)
+                .setRegParam(0.1)
+                .setElasticNetParam(0)
+                .setFeaturesCol("features")
+                .setLabelCol("Wynik");
+
+        String[] labels = {"OcenaC", "Timestamp", "OcenaCPP"};
+
+        VectorAssembler va = new VectorAssembler()
+                .setInputCols(labels)
+                .setOutputCol("features");
+
+        Dataset<Row>[] splits = df.randomSplit(new double[]{0.7, 0.3});
+        Dataset<Row> train = splits[0];
+        Dataset<Row> test = splits[1];
+
+        return new Tuple2<>(lr.fit(train), test);
+    }
+
     public static Dataset<Row> AddPropability(Dataset<Row> df){
         df = df.withColumn("prob",callUDF("max_vector_element",col("probability")));
         df.show();
@@ -100,5 +136,112 @@ public class Logistics {
         public Double call(Vector vector) throws Exception {
             return vector.toArray()[vector.argmax()];
         }
+    }
+
+    public static void plotObjectiveHistory(double[] objectiveHistory){
+        List<Integer> x = IntStream.range(0, objectiveHistory.length).boxed().collect(Collectors.toList());
+        List<Double> y = Arrays.stream(objectiveHistory).boxed().collect(Collectors.toList());
+        Plot plt = Plot.create(PythonConfig.pythonBinPathConfig("python3"));
+        plt.plot().add(x, y).label("Objective history");
+        plt.xlabel("Iteration");
+        plt.ylabel("Objective");
+        plt.title("Objective history");
+        plt.legend();
+        try {
+            plt.show();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (PythonExecutionException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    static void plotROC(Dataset<Row> roc){
+        List<Double> tpr = roc.select("TPR").as(Encoders.DOUBLE()).collectAsList();
+        List<Double> fpr = roc.select("FPR").as(Encoders.DOUBLE()).collectAsList();Plot plt = Plot.create(PythonConfig.pythonBinPathConfig("python3"));
+        plt.plot().add(fpr, tpr).label("ROC curve");
+        plt.xlabel("False Positive Rate");
+        plt.ylabel("True Positive Rate");
+        plt.title("ROC curve");
+        plt.legend();
+        try {
+            plt.show();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (PythonExecutionException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void showMeasures(BinaryLogisticRegressionTrainingSummary summary){
+        System.out.println("Accuracy: " + summary.accuracy());
+        System.out.println("FPR: " + summary.weightedFalsePositiveRate());
+        System.out.println("TPR: " + summary.weightedTruePositiveRate());
+        System.out.println("Precision: " + summary.weightedPrecision());
+        System.out.println("Recall: " + summary.weightedRecall());
+        System.out.println("F-measure: " + summary.weightedFMeasure());
+    }
+    public static void evaluateModel(Dataset<Row> df, LogisticRegressionModel model){
+
+        MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
+                .setLabelCol("Wynik")
+                .setPredictionCol("prediction")
+                .setMetricName("accuracy");
+
+        double accuracy = evaluator.evaluate(model.transform(df));
+        System.out.println("Accuracy: " + accuracy);
+
+        evaluator.setMetricName("weightedPrecision");
+        double weightedPrecision = evaluator.evaluate(model.transform(df));
+        System.out.println("Weighted Precision: " + weightedPrecision);
+
+        evaluator.setMetricName("weightedRecall");
+        double weightedRecall = evaluator.evaluate(model.transform(df));
+        System.out.println("Weighted Recall: " + weightedRecall);
+
+        evaluator.setMetricName("f1");
+        double f1 = evaluator.evaluate(model.transform(df));
+        System.out.println("F1: " + f1);
+    }
+
+//    Napisz funkcje
+//
+//    void addClassificationToGrid(SparkSession spark, LogisticRegressionModel lrModel)
+//    która:
+//
+//    Wczyta zbiór danych grid.csv
+//    Przetworzy daty, tak aby stały się wartościami numerycznymi
+//    Skonfiguruje VectorAssembler
+//    Wywoła funkcję predykcji zmiennej lrModel
+//    Usunie nadmiarowe kolumny
+//    Za pomocą funkcji IF() SQL lub zarejestrowanej funkcji użytkownika UDF dokona konwersji etykiet 0→Nie zdał oraz 1→Zdał
+//    Wyświetli wynik
+//    Zapisze w pliku grid-with-classification.csv
+
+    static void addClassificationToGrid(SparkSession spark, LogisticRegressionModel lrModel){
+
+        Dataset<Row> df = LoadGrid();
+        df = df.withColumn("Timestamp", unix_timestamp(col("DataC"), "yyyy-MM-dd"));
+
+        df.show();
+
+        String[] labels = {"OcenaC", "Timestamp", "OcenaCPP"};
+
+        VectorAssembler va = new VectorAssembler()
+                .setInputCols(labels)
+                .setOutputCol("features");
+
+        df = va.transform(df);
+        Dataset<Row> predictions = lrModel.transform(df);
+
+        predictions = predictions.withColumn("Wynik", expr("IF(prediction=1.0, 'Zdal', 'Nie zdal')"));
+        predictions.drop("prediction", "rawPrediction", "probability", "Timestamp", "features").show();
+
+        predictions.write()
+                .format("csv")
+                .option("header", true)
+                .option("delimiter",",")
+                .mode(SaveMode.Overwrite)
+                .save("./src/main/resources/grid-with-classification-cpp");
     }
 }

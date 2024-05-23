@@ -55,8 +55,42 @@ public class DataHandler {
         return df;
     }
 
-    public static void SaveData(Dataset<Row> df){
-        df = df.repartition(1);
+    public static Dataset<Row> LoadGrid(){
+        spark.udf().register(  "max_vector_element",new Logistics.MaxVectorElement(),DataTypes.DoubleType);
+        StructType schema = DataTypes.createStructType(new StructField[] {
+                DataTypes.createStructField(
+                        "ImieNazwisko",
+                        DataTypes.StringType,
+                        true),
+                DataTypes.createStructField(
+                        "OcenaC",
+                        DataTypes.DoubleType,
+                        true),
+                DataTypes.createStructField(
+                        "DataC",
+                        DataTypes.DateType,
+                        true),
+                DataTypes.createStructField(
+                        "OcenaCPP",
+                        DataTypes.DoubleType,
+                        true),
+        });
+
+        Dataset<Row> df = spark.read()
+                .format("csv")
+                .option("header", "true")
+                .option("delimiter", ",")
+                .schema(schema)
+                .load("src/main/resources/grid.csv");
+
+        System.out.println("Excerpt of the dataframe content:");
+        df.show(20);
+
+        return df;
+    }
+
+    public static void SaveData(Dataset<Row> df, int partitions){
+        df = df.repartition(partitions);
         df.write()
                 .format("csv")
                 .option("header", true)
